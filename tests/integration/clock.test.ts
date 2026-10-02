@@ -17,8 +17,14 @@ let userId = "";
 const actor = () => ({ userId, ip: "local", userAgent: "test" });
 
 const clock = (pin = PIN) => registerTimeRecord({ pin, deviceId });
-const backdate = (id: string, ms = 120_000) =>
-  prisma.$executeRaw`UPDATE "TimeRecord" SET "recordedAt" = "recordedAt" - (${ms} * interval '1 millisecond') WHERE "employeeId" = ${id}::uuid`;
+const backdate = async (id: string, ms = 120_000) => {
+  await prisma.$executeRawUnsafe(`ALTER TABLE "TimeRecord" DISABLE TRIGGER USER`);
+  try {
+    await prisma.$executeRaw`UPDATE "TimeRecord" SET "recordedAt" = "recordedAt" - (${ms} * interval '1 millisecond') WHERE "employeeId" = ${id}::uuid`;
+  } finally {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "TimeRecord" ENABLE TRIGGER USER`);
+  }
+};
 
 async function wipe() {
   await prisma.$executeRawUnsafe(`ALTER TABLE "TimeRecord" DISABLE TRIGGER USER`);
