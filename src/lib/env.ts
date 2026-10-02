@@ -3,6 +3,11 @@ import { z } from "zod";
 const flag = z.enum(["true", "false"]).default("false").transform((v) => v === "true");
 const int = (def: number, min = 0) => z.coerce.number().int().min(min).default(def);
 
+const runtimeEnv = () => {
+  const processEnv = typeof process !== "undefined" && process.env ? process.env : {};
+  return (globalThis as typeof globalThis & { process?: { env?: Record<string, string | undefined> } }).process?.env ?? processEnv;
+};
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().url(),
@@ -33,7 +38,7 @@ export type Env = z.infer<typeof schema>;
 let cached: Env | undefined;
 
 export function validateEnv(): Env {
-  cached ??= schema.parse(process.env);
+  cached ??= schema.parse(runtimeEnv());
   return cached;
 }
 

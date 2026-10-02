@@ -7,8 +7,27 @@ import {
   randomInt,
   timingSafeEqual,
 } from "node:crypto";
-import argon2 from "argon2";
 import { env } from "./env";
+
+const isNodeRuntime = typeof process !== "undefined" && !!process.versions?.node;
+
+const toBase64Url = (value: Uint8Array) => Buffer.from(value).toString("base64url");
+const fromBase64Url = (value: string) => Uint8Array.from(Buffer.from(value, "base64url"));
+
+const derivePbkdf2 = async (value: string, salt: Uint8Array, iterations: number) => {
+  const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(value), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: Buffer.from(salt),
+      iterations,
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    256,
+  );
+  return new Uint8Array(bits);
+};
 
 export const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -22,16 +41,44 @@ export function safeEqual(a: string, b: string) {
   return timingSafeEqual(x, y);
 }
 
-const argonOptions = () => ({
-  type: argon2.argon2id as 2,
+const legacyArgonOptions = () => ({
   memoryCost: env.ARGON_MEMORY_KIB,
   timeCost: env.ARGON_TIME_COST,
   parallelism: 1,
 });
 
-export const hashSecret = (value: string) => argon2.hash(value, argonOptions());
+export const hashSecret = async (value: string) => {
+  if (!isNodeRuntime) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iterations = 120000;
+    const digest = await derivePbkdf2(value, salt, iterations);
+    return `pbkdf2$${iterations}$${toBase64Url(salt)}$${toBase64Url(digest)}`;
+  }
 
-export const verifySecret = (hash: string, value: string) => argon2.verify(hash, value).catch(() => false);
+  const argon2 = (await import("argon2")).default;
+  return argon2.hash(value, {
+    type: argon2.argon2id as 2,
+    ...legacyArgonOptions(),
+  });
+};
+
+export const verifySecret = async (hash: string, value: string) => {
+  if (!hash.startsWith("pbkdf2$")) {
+    if (!isNodeRuntime) return false;
+    const argon2 = (await import("argon2")).default;
+    return argon2.verify(hash, value).catch(() => false);
+  }
+
+  const [, iterationsRaw, saltRaw, digestRaw] = hash.split("$");
+  if (!iterationsRaw || !saltRaw || !digestRaw) return false;
+
+  const iterations = Number(iterationsRaw);
+  const salt = fromBase64Url(saltRaw);
+  const expected = fromBase64Url(digestRaw);
+  const actual = await derivePbkdf2(value, salt, iterations);
+
+  return timingSafeEqual(Buffer.from(actual), Buffer.from(expected));
+};
 
 let dummyHash: Promise<string> | undefined;
 
@@ -76,7 +123,7 @@ export function validatePin(pin: string): string | null {
 }
 
 export function generatePin() {
-  for (;;) {
+  for (; ;) {
     const pin = Array.from({ length: env.PIN_LENGTH }, () => randomInt(10)).join("");
     if (!validatePin(pin)) return pin;
   }

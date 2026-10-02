@@ -19,7 +19,8 @@
     "dev:vinext": "vite dev --port 3001",
     "build:vinext": "vite build",
     "start:vinext": "vite preview",
-    "deploy:vinext": "vinext-cloudflare deploy"
+    "deploy:vinext": "vinext-cloudflare deploy",
+    "deploy:cloudflare": "npx cf deploy --secrets-file .cloudflare.env"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

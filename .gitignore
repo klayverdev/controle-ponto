@@ -1,6 +1,7 @@
 node_modules
 .next
 .env
+.cloudflare.env
 .vscode/
 *.tsbuildinfo
 next-env.d.ts

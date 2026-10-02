@@ -6,6 +6,11 @@ import * as devices from "@/server/repositories/device-repository";
 export const DEVICE_COOKIE = process.env.NODE_ENV === "production" ? "__Host-kiosk_device" : "kiosk_device";
 
 export async function currentDevice() {
-  const token = (await cookies()).get(DEVICE_COOKIE)?.value;
-  return token ? devices.findByTokenHash(prisma, sha256(token)) : null;
+  try {
+    const token = (await cookies()).get(DEVICE_COOKIE)?.value;
+    return token ? devices.findByTokenHash(prisma, sha256(token)) : null;
+  } catch (error) {
+    console.error("currentDevice failed:", error);
+    return null;
+  }
 }
