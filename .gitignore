@@ -1,6 +1,7 @@
 node_modules
 .next
 .env
+.vscode/
 *.tsbuildinfo
 next-env.d.ts
 test-results
